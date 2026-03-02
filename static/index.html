@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DataLogger</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap"
+    rel="stylesheet">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2e3148;
+      --accent: #5b6cff;
+      --accent2: #ff5f7e;
+      --green: #36d68a;
+      --text: #e4e6f0;
+      --muted: #6b7099;
+      --mono: 'Space Mono', monospace;
+      --sans: 'DM Sans', sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem 4rem;
+    }
+
+    h1 {
+      font-family: var(--mono);
+      font-size: 1.6rem;
+      letter-spacing: .1em;
+      color: var(--accent);
+      margin-bottom: 2rem;
+      text-transform: uppercase;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 1.5rem;
+      width: 100%;
+      max-width: 960px;
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.4rem;
+    }
+
+    .panel h2 {
+      font-family: var(--mono);
+      font-size: .7rem;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: .6rem;
+    }
+
+    .instructions {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: .7rem;
+      margin-bottom: 1.4rem;
+    }
+
+    .instructions li {
+      font-size: .83rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      line-height: 1.4;
+    }
+
+    .icon-shape {
+      flex-shrink: 0;
+      width: 22px;
+      height: 22px;
+    }
+
+    /* Controls */
+    label {
+      display: block;
+      font-size: .75rem;
+      color: var(--muted);
+      margin-bottom: .3rem;
+      font-family: var(--mono);
+      letter-spacing: .05em;
+    }
+
+    input[type="number"] {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: .5rem .7rem;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: .9rem;
+      margin-bottom: .3rem;
+      outline: none;
+      transition: border-color .2s;
+    }
+
+    input[type="number"]:focus {
+      border-color: var(--accent);
+    }
+
+    .error-msg {
+      font-size: .72rem;
+      color: var(--accent2);
+      min-height: 1.1em;
+      margin-bottom: .7rem;
+      font-family: var(--mono);
+    }
+
+    .btn {
+      width: 100%;
+      padding: .55rem;
+      border: none;
+      border-radius: 8px;
+      font-family: var(--mono);
+      font-size: .78rem;
+      letter-spacing: .08em;
+      cursor: pointer;
+      transition: opacity .15s, transform .1s;
+      margin-bottom: .5rem;
+      text-transform: uppercase;
+    }
+
+    .btn:active {
+      transform: scale(.97);
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .btn-secondary {
+      background: var(--border);
+      color: var(--text);
+    }
+
+    .btn-success {
+      background: var(--green);
+      color: #0f1117;
+    }
+
+    .btn:disabled {
+      opacity: .4;
+      cursor: not-allowed;
+    }
+
+    .timer {
+      font-family: var(--mono);
+      font-size: .85rem;
+      color: var(--green);
+      margin-bottom: .5rem;
+      min-height: 1.3em;
+    }
+
+    .status {
+      font-size: .75rem;
+      color: var(--muted);
+      font-family: var(--mono);
+      min-height: 1.2em;
+    }
+
+    /* Canvas area */
+    .canvas-wrap {
+      position: relative;
+    }
+
+    #canvas {
+      width: 100%;
+      aspect-ratio: 4/3;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      cursor: crosshair;
+      display: block;
+      user-select: none;
+    }
+
+    /* Overlay message */
+    #overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px;
+      background: rgba(15, 17, 23, .75);
+      font-family: var(--mono);
+      font-size: .85rem;
+      color: var(--muted);
+      pointer-events: none;
+      transition: opacity .3s;
+    }
+
+    #overlay.hidden {
+      opacity: 0;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>DataLogger</h1>
+
+  <div class="layout">
+    <!-- Left panel -->
+    <div class="panel">
+      <h2>Instructions</h2>
+      <ul class="instructions">
+        <li>
+          <svg class="icon-shape" viewBox="0 0 22 22">
+            <polygon points="11,2 21,20 1,20" fill="none" stroke="#5b6cff" stroke-width="1.8" />
+          </svg>
+          Left Click on the Triangle
+        </li>
+        <li>
+          <svg class="icon-shape" viewBox="0 0 22 22">
+            <polygon points="11,20 21,2 1,2" fill="none" stroke="#ff5f7e" stroke-width="1.8" />
+          </svg>
+          Right Click on the Reversed Triangle
+        </li>
+        <li>
+          <svg class="icon-shape" viewBox="0 0 22 22">
+            <rect x="3" y="3" width="16" height="16" fill="none" stroke="#f0c040" stroke-width="1.8" />
+          </svg>
+          Double Click on the Square
+        </li>
+        <li>
+          <svg class="icon-shape" viewBox="0 0 22 22">
+            <circle cx="11" cy="11" r="8" fill="none" stroke="#36d68a" stroke-width="1.8" />
+          </svg>
+          Drag the Circle to the Goal Position
+        </li>
+      </ul>
+
+      <h2>Settings</h2>
+      <label for="duration">Measurement period (minutes)</label>
+      <input type="number" id="duration" min="1" max="60" value="1" placeholder="1–60">
+      <div class="error-msg" id="error-msg"></div>
+
+      <button class="btn btn-primary" id="btn-start">Start Measurement</button>
+      <button class="btn btn-secondary" id="btn-reset">Reset</button>
+      <button class="btn btn-success" id="btn-download" disabled>Download CSV</button>
+
+      <h2 style="margin-top:1rem;">AI Generation</h2>
+      <label for="model-select">Select Model</label>
+      <select id="model-select"
+        style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:.5rem .7rem;color:var(--text);font-family:var(--mono);font-size:.8rem;margin-bottom:.5rem;outline:none;">
+        <option value="rnn">Bidirectional RNN</option>
+        <option value="cnn">FCN CNN</option>
+      </select>
+      <button class="btn" id="btn-generate" disabled style="background:#7c3aed;color:#fff;">Generate Trajectory</button>
+      <div class="status" id="generate-status" style="margin-top:.4rem;color:var(--muted);min-height:1.4em;"></div>
+
+      <h2 style="margin-top:1rem;">Bot Auto-Play</h2>
+      <button class="btn" id="btn-bot"
+        style="background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff;font-weight:700;">🤖 Start Bot</button>
+      <button class="btn btn-secondary" id="btn-bot-stop" disabled>⏹ Stop Bot</button>
+      <div class="status" id="bot-status" style="margin-top:.4rem;color:var(--muted);min-height:1.4em;"></div>
+
+      <div class="timer" id="timer">0m 0s left</div>
+      <div class="status" id="status">Press the Start Measurement button!</div>
+    </div>
+
+    <!-- Canvas -->
+    <div class="canvas-wrap">
+      <canvas id="canvas"></canvas>
+      <div id="overlay">Press Start to begin</div>
+    </div>
+
+    <!-- Generated trajectory canvas -->
+    <div id="generated-panel" style="display:none; grid-column:1/-1;">
+      <div class="panel" style="margin-top:0;">
+        <h2>Generated Trajectory</h2>
+        <div style="display:flex;gap:1rem;align-items:center;margin-bottom:.8rem;">
+          <span id="gen-model-label" style="font-family:var(--mono);font-size:.75rem;color:var(--accent);"></span>
+          <span id="gen-points-label" style="font-family:var(--mono);font-size:.75rem;color:var(--muted);"></span>
+        </div>
+        <canvas id="gen-canvas"
+          style="width:100%;height:220px;background:var(--bg);border:1px solid var(--border);border-radius:8px;display:block;"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── Constants ─────────────────────────────────────────────────────────────
+    const SHAPE_TYPES = ['triangle', 'revTriangle', 'square', 'circle'];
+    const COLORS = {
+      triangle: '#5b6cff',
+      revTriangle: '#ff5f7e',
+      square: '#f0c040',
+      circle: '#36d68a',
+      goal: '#2e3148',
+    };
+    const INSTRUCTIONS = {
+      triangle: 'Left Click on the Triangle',
+      revTriangle: 'Right Click on the Reversed Triangle',
+      square: 'Double Click on the Square',
+      circle: 'Drag the Circle to the Goal Position',
+    };
+
+    // ── DOM refs ───────────────────────────────────────────────────────────────
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const overlay = document.getElementById('overlay');
+    const timerEl = document.getElementById('timer');
+    const statusEl = document.getElementById('status');
+    const errorEl = document.getElementById('error-msg');
+    const btnStart = document.getElementById('btn-start');
+    const btnReset = document.getElementById('btn-reset');
+    const btnDl = document.getElementById('btn-download');
+    const durationInput = document.getElementById('duration');
+
+    // ── State ──────────────────────────────────────────────────────────────────
+    let running = false;
+    let timerInterval = null;
+    let secondsLeft = 0;
+    let events = [];
+
+    let currentType = null;   // which shape type is active
+    let currentShape = null;  // { x, y, size/r, flash }
+    let goalShape = null;     // only used for circle task
+    let dragging = false;
+    let dragOffX = 0, dragOffY = 0;
+    let lastUsedType = null;  // avoid repeating same shape twice in a row
+
+    // ── Canvas sizing ──────────────────────────────────────────────────────────
+    function resize() {
+      const rect = canvas.parentElement.getBoundingClientRect();
+      canvas.width = Math.floor(rect.width) - 2;
+      canvas.height = Math.floor(canvas.width * 3 / 4);
+      draw();
+    }
+
+    // ── Random helpers ─────────────────────────────────────────────────────────
+    function randX(margin) { margin = margin || 65; return margin + Math.random() * (canvas.width - margin * 2); }
+    function randY(margin) { margin = margin || 65; return margin + Math.random() * (canvas.height - margin * 2); }
+
+    function pickNextType() {
+      var options = SHAPE_TYPES.filter(function (t) { return t !== lastUsedType; });
+      return options[Math.floor(Math.random() * options.length)];
+    }
+
+    function spawnNext() {
+      currentType = pickNextType();
+      lastUsedType = currentType;
+      dragging = false;
+
+      if (currentType === 'circle') {
+        goalShape = { x: randX(), y: randY(), r: 28 };
+        var cx, cy;
+        do { cx = randX(); cy = randY(); }
+        while (Math.hypot(cx - goalShape.x, cy - goalShape.y) < 110);
+        currentShape = { x: cx, y: cy, r: 26, flash: false };
+      } else {
+        goalShape = null;
+        currentShape = { x: randX(), y: randY(), size: 52, flash: false };
+      }
+
+      statusEl.textContent = INSTRUCTIONS[currentType];
+      draw();
+    }
+
+    // ── Draw ───────────────────────────────────────────────────────────────────
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (!running || !currentType) return;
+
+      // Goal (circle task only)
+      if (currentType === 'circle' && goalShape) {
+        var g = goalShape;
+        ctx.beginPath();
+        ctx.arc(g.x, g.y, g.r, 0, Math.PI * 2);
+        ctx.fillStyle = '#1e2235';
+        ctx.fill();
+        ctx.strokeStyle = '#36d68a66';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.fillStyle = '#36d68aaa';
+        ctx.font = 'bold 11px Space Mono, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('GOAL', g.x, g.y);
+      }
+
+      var s = currentShape;
+      var color = COLORS[currentType];
+      var fillColor = s.flash ? color : color + '55';
+
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = color;
+      ctx.fillStyle = fillColor;
+
+      if (currentType === 'triangle') {
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y - s.size / 2);
+        ctx.lineTo(s.x + s.size / 2, s.y + s.size / 2);
+        ctx.lineTo(s.x - s.size / 2, s.y + s.size / 2);
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+
+      } else if (currentType === 'revTriangle') {
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y + s.size / 2);
+        ctx.lineTo(s.x + s.size / 2, s.y - s.size / 2);
+        ctx.lineTo(s.x - s.size / 2, s.y - s.size / 2);
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+
+      } else if (currentType === 'square') {
+        var half = s.size / 2;
+        ctx.fillRect(s.x - half, s.y - half, s.size, s.size);
+        ctx.strokeRect(s.x - half, s.y - half, s.size, s.size);
+
+      } else if (currentType === 'circle') {
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fill(); ctx.stroke();
+      }
+    }
+
+    // ── Hit tests ──────────────────────────────────────────────────────────────
+    function getPos(e) {
+      var rect = canvas.getBoundingClientRect();
+      var scaleX = canvas.width / rect.width;
+      var scaleY = canvas.height / rect.height;
+      return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+    }
+
+    function sign(p1x, p1y, p2x, p2y, p3x, p3y) {
+      return (p1x - p3x) * (p2y - p3y) - (p2x - p3x) * (p1y - p3y);
+    }
+    function pointInTriangle(px, py, ax, ay, bx, by, cx, cy) {
+      var d1 = sign(px, py, ax, ay, bx, by), d2 = sign(px, py, bx, by, cx, cy), d3 = sign(px, py, cx, cy, ax, ay);
+      return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
+    }
+
+    function hitCurrent(x, y) {
+      var s = currentShape;
+      if (currentType === 'triangle') {
+        return pointInTriangle(x, y, s.x, s.y - s.size / 2, s.x + s.size / 2, s.y + s.size / 2, s.x - s.size / 2, s.y + s.size / 2);
+      } else if (currentType === 'revTriangle') {
+        return pointInTriangle(x, y, s.x, s.y + s.size / 2, s.x + s.size / 2, s.y - s.size / 2, s.x - s.size / 2, s.y - s.size / 2);
+      } else if (currentType === 'square') {
+        return x >= s.x - s.size / 2 && x <= s.x + s.size / 2 && y >= s.y - s.size / 2 && y <= s.y + s.size / 2;
+      } else if (currentType === 'circle') {
+        return Math.hypot(x - s.x, y - s.y) <= s.r;
+      }
+      return false;
+    }
+
+    function circleOnGoal() {
+      if (!goalShape || !currentShape) return false;
+      return Math.hypot(currentShape.x - goalShape.x, currentShape.y - goalShape.y) <= goalShape.r + 4;
+    }
+
+    // ── Success: flash then spawn next ─────────────────────────────────────────
+    function onSuccess() {
+      currentShape.flash = true;
+      draw();
+      setTimeout(function () {
+        currentShape.flash = false;
+        spawnNext();
+      }, 280);
+    }
+
+    // ── Event recording ────────────────────────────────────────────────────────
+    function record(type, x, y, extra) {
+      extra = extra || '';
+      events.push({ time: Date.now(), type: type, x: x.toFixed(1), y: y.toFixed(1), extra: extra });
+    }
+
+    var lastMoveTime = 0;
+
+    canvas.addEventListener('mousemove', function (e) {
+      if (!running) return;
+      var now = Date.now();
+      if (now - lastMoveTime < 16) return;
+      lastMoveTime = now;
+      var p = getPos(e);
+      record('mousemove', p.x, p.y);
+
+      if (dragging && currentType === 'circle') {
+        currentShape.x = p.x - dragOffX;
+        currentShape.y = p.y - dragOffY;
+        draw();
+      }
+    });
+
+    canvas.addEventListener('mousedown', function (e) {
+      if (!running) return;
+      var p = getPos(e);
+      record('mousedown', p.x, p.y, 'button:' + e.button);
+      if (currentType === 'circle' && hitCurrent(p.x, p.y)) {
+        dragging = true;
+        dragOffX = p.x - currentShape.x;
+        dragOffY = p.y - currentShape.y;
+      }
+    });
+
+    canvas.addEventListener('mouseup', function (e) {
+      if (!running) return;
+      var p = getPos(e);
+      record('mouseup', p.x, p.y, 'button:' + e.button);
+      if (dragging) {
+        dragging = false;
+        if (circleOnGoal()) {
+          onSuccess();
+        } else {
+          draw();
+        }
+      }
+    });
+
+    canvas.addEventListener('click', function (e) {
+      if (!running || currentType !== 'triangle') return;
+      var p = getPos(e);
+      record('click', p.x, p.y);
+      if (hitCurrent(p.x, p.y)) onSuccess();
+    });
+
+    canvas.addEventListener('contextmenu', function (e) {
+      e.preventDefault();
+      if (!running || currentType !== 'revTriangle') return;
+      var p = getPos(e);
+      record('contextmenu', p.x, p.y);
+      if (hitCurrent(p.x, p.y)) onSuccess();
+    });
+
+    canvas.addEventListener('dblclick', function (e) {
+      if (!running || currentType !== 'square') return;
+      var p = getPos(e);
+      record('dblclick', p.x, p.y);
+      if (hitCurrent(p.x, p.y)) onSuccess();
+    });
+
+    // ── Timer ──────────────────────────────────────────────────────────────────
+    function updateTimer() {
+      if (secondsLeft <= 0) { stopMeasurement(); return; }
+      secondsLeft--;
+      var m = Math.floor(secondsLeft / 60), s = secondsLeft % 60;
+      timerEl.textContent = m + 'm ' + s + 's left';
+    }
+
+    function stopMeasurement() {
+      running = false;
+      clearInterval(timerInterval);
+      currentType = null;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      timerEl.textContent = '0m 0s left';
+      statusEl.textContent = 'Measurement complete!';
+      overlay.textContent = 'Measurement complete — Download your CSV';
+      overlay.classList.remove('hidden');
+      btnStart.disabled = false;
+      btnDl.disabled = events.length === 0;
+      updateGenerateBtn();
+    }
+
+    // ── Controls ───────────────────────────────────────────────────────────────
+    btnStart.addEventListener('click', function () {
+      var val = parseInt(durationInput.value);
+      if (!val || val < 1 || val > 60) {
+        errorEl.textContent = 'Measurement period must be an integer between 1 and 60!';
+        return;
+      }
+      errorEl.textContent = '';
+      events = [];
+      running = true;
+      secondsLeft = val * 60;
+      lastUsedType = null;
+      timerEl.textContent = val + 'm 0s left';
+      overlay.classList.add('hidden');
+      btnStart.disabled = true;
+      btnDl.disabled = true;
+      clearInterval(timerInterval);
+      timerInterval = setInterval(updateTimer, 1000);
+      spawnNext();
+    });
+
+    btnReset.addEventListener('click', function () {
+      running = false;
+      clearInterval(timerInterval);
+      events = [];
+      dragging = false;
+      currentType = null;
+      lastUsedType = null;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      timerEl.textContent = '0m 0s left';
+      statusEl.textContent = 'Press the Start Measurement button!';
+      errorEl.textContent = '';
+      overlay.textContent = 'Press Start to begin';
+      overlay.classList.remove('hidden');
+      btnStart.disabled = false;
+      btnDl.disabled = true;
+    });
+
+    btnDl.addEventListener('click', function () {
+      if (!events.length) return;
+      var header = 'time,type,x,y,extra\n';
+      var rows = events.map(function (e) {
+        return e.time + ',' + e.type + ',' + e.x + ',' + e.y + ',' + e.extra;
+      }).join('\n');
+      var blob = new Blob([header + rows], { type: 'text/csv' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'mouse_dynamics_' + Date.now() + '.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    // ── AI Model Integration ───────────────────────────────────────────────────
+    // Local deployment - FastAPI server running on localhost
+    const API_URL = "http://localhost:8000/api";
+
+    const btnGenerate = document.getElementById('btn-generate');
+    const generateStatus = document.getElementById('generate-status');
+    const modelSelect = document.getElementById('model-select');
+    const generatedPanel = document.getElementById('generated-panel');
+    const genCanvas = document.getElementById('gen-canvas');
+    const genModelLabel = document.getElementById('gen-model-label');
+    const genPointsLabel = document.getElementById('gen-points-label');
+
+    // Enable Generate button when measurement is complete and events exist
+    function updateGenerateBtn() {
+      btnGenerate.disabled = events.length === 0;
+    }
+
+    btnGenerate.addEventListener('click', async function () {
+      if (!events.length) return;
+
+      const modelType = modelSelect.value;
+      generateStatus.textContent = '⏳ Sending to model...';
+      generateStatus.style.color = 'var(--muted)';
+      btnGenerate.disabled = true;
+
+      try {
+        // Convert recorded events to [x, y, dx, dy] format expected by the model
+        const moveEvents = events.filter(e => e.type === 'mousemove');
+        if (moveEvents.length < 2) {
+          generateStatus.textContent = '❌ Not enough mouse movement data';
+          generateStatus.style.color = 'var(--accent2)';
+          btnGenerate.disabled = false;
+          return;
+        }
+
+        // Build dx, dy pairs (what the model was trained on: _dx_dy_)
+        const actions = [];
+        for (let i = 1; i < moveEvents.length; i++) {
+          const dx = parseFloat(moveEvents[i].x) - parseFloat(moveEvents[i - 1].x);
+          const dy = parseFloat(moveEvents[i].y) - parseFloat(moveEvents[i - 1].y);
+          actions.push([dx, dy]);
+        }
+
+        const res = await fetch(`${API_URL}/generate/${modelType}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ actions: actions })
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || 'API error ' + res.status);
+        }
+
+        const data = await res.json();
+        generateStatus.textContent = '✅ Generated!';
+        generateStatus.style.color = 'var(--green)';
+
+        // Display result
+        displayGeneratedTrajectory(data.generated_actions, data.model);
+
+      } catch (err) {
+        generateStatus.textContent = '❌ ' + err.message;
+        generateStatus.style.color = 'var(--accent2)';
+        console.error(err);
+      } finally {
+        btnGenerate.disabled = false;
+      }
+    });
+
+    function displayGeneratedTrajectory(actions, modelName) {
+      generatedPanel.style.display = 'block';
+      genModelLabel.textContent = '▶ ' + (modelName || modelSelect.value).toUpperCase();
+      genPointsLabel.textContent = actions.length + ' points';
+
+      // Size canvas
+      const w = genCanvas.parentElement.offsetWidth - 32;
+      genCanvas.width = w;
+      genCanvas.height = 220;
+
+      const gctx = genCanvas.getContext('2d');
+      gctx.clearRect(0, 0, genCanvas.width, genCanvas.height);
+
+      // Reconstruct absolute path from dx/dy
+      let px = genCanvas.width / 2;
+      let py = genCanvas.height / 2;
+      const points = [[px, py]];
+      for (const [dx, dy] of actions) {
+        px += dx * 0.3; // scale down to fit canvas
+        py += dy * 0.3;
+        points.push([px, py]);
+      }
+
+      // Draw gradient path
+      gctx.lineWidth = 2;
+      gctx.lineJoin = 'round';
+      gctx.lineCap = 'round';
+      for (let i = 1; i < points.length; i++) {
+        const t = i / points.length;
+        gctx.strokeStyle = `hsl(${220 + t * 80}, 80%, ${50 + t * 20}%)`;
+        gctx.beginPath();
+        gctx.moveTo(points[i - 1][0], points[i - 1][1]);
+        gctx.lineTo(points[i][0], points[i][1]);
+        gctx.stroke();
+      }
+
+      // Start dot
+      gctx.beginPath();
+      gctx.arc(points[0][0], points[0][1], 5, 0, Math.PI * 2);
+      gctx.fillStyle = '#36d68a';
+      gctx.fill();
+
+      // End dot
+      const last = points[points.length - 1];
+      gctx.beginPath();
+      gctx.arc(last[0], last[1], 5, 0, Math.PI * 2);
+      gctx.fillStyle = '#ff5f7e';
+      gctx.fill();
+    }
+
+    // Patch stopMeasurement to enable generate button
+    const _origStop = stopMeasurement;
+    // Override Download CSV click to also update generate button
+    btnDl.addEventListener('click', updateGenerateBtn);
+
+    // ── Bot Auto-Play ──────────────────────────────────────────────────────────
+    const btnBot = document.getElementById('btn-bot');
+    const btnBotStop = document.getElementById('btn-bot-stop');
+    const botStatus = document.getElementById('bot-status');
+    let botRunning = false;
+    let botAnimId = null;
+    let botTrail = []; // ghost trail for visual feedback
+
+    btnBot.addEventListener('click', function () {
+      if (botRunning) return;
+      startBot();
+    });
+
+    btnBotStop.addEventListener('click', function () {
+      stopBot();
+    });
+
+    function stopBot() {
+      botRunning = false;
+      if (botAnimId) { cancelAnimationFrame(botAnimId); botAnimId = null; }
+      btnBot.disabled = false;
+      btnBotStop.disabled = true;
+
+      // Also stop the measurement and enable CSV download
+      if (running) {
+        running = false;
+        clearInterval(timerInterval);
+        currentType = null;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        timerEl.textContent = '0m 0s left';
+        btnStart.disabled = false;
+      }
+
+      if (events.length > 0) {
+        btnDl.disabled = false;
+        statusEl.textContent = 'Bot complete! ' + events.length + ' events recorded.';
+        overlay.textContent = 'Bot complete — Download your CSV';
+        overlay.classList.remove('hidden');
+        botStatus.textContent = '✅ Done! ' + events.length + ' events. Click Download CSV.';
+        botStatus.style.color = 'var(--green)';
+      } else {
+        botStatus.textContent = 'Bot stopped.';
+        botStatus.style.color = 'var(--muted)';
+      }
+      updateGenerateBtn();
+    }
+
+    async function startBot() {
+      botRunning = true;
+      btnBot.disabled = true;
+      btnBotStop.disabled = false;
+      botStatus.textContent = '🤖 Bot starting...';
+      botStatus.style.color = '#f59e0b';
+      botTrail = [];
+
+      // If not running, start measurement automatically
+      if (!running) {
+        var val = parseInt(durationInput.value);
+        if (!val || val < 1 || val > 60) val = 1;
+        durationInput.value = val;
+        errorEl.textContent = '';
+        events = [];
+        running = true;
+        secondsLeft = val * 60;
+        lastUsedType = null;
+        timerEl.textContent = val + 'm 0s left';
+        overlay.classList.add('hidden');
+        btnStart.disabled = true;
+        btnDl.disabled = true;
+        clearInterval(timerInterval);
+        timerInterval = setInterval(updateTimer, 1000);
+        spawnNext();
+      }
+
+      // Bot loop: continuously interact with shapes
+      botLoop();
+    }
+
+    async function botLoop() {
+      if (!botRunning || !running) {
+        stopBot();
+        return;
+      }
+
+      if (!currentShape || !currentType) {
+        // Wait for a shape to appear
+        setTimeout(botLoop, 200);
+        return;
+      }
+
+      botStatus.textContent = '🤖 Targeting: ' + currentType.toUpperCase();
+      botStatus.style.color = '#f59e0b';
+
+      try {
+        if (currentType === 'circle') {
+          await botDragCircle();
+        } else {
+          await botClickShape();
+        }
+      } catch (err) {
+        console.error('Bot error:', err);
+        botStatus.textContent = '❌ Bot error: ' + err.message;
+        botStatus.style.color = 'var(--accent2)';
+      }
+
+      if (botRunning && running) {
+        // Small delay before next shape
+        setTimeout(botLoop, 400);
+      } else {
+        stopBot();
+      }
+    }
+
+    // Generate a smooth AI-driven path from start to target
+    async function generateBotPath(startX, startY, targetX, targetY, numSteps) {
+      numSteps = numSteps || 64;
+      const modelType = modelSelect.value;
+
+      // Build a seed trajectory as dx/dy deltas pointing towards target
+      const totalDx = targetX - startX;
+      const totalDy = targetY - startY;
+      const seedActions = [];
+      for (let i = 0; i < numSteps; i++) {
+        // Base direction with some noise
+        const progress = (i + 1) / numSteps;
+        const noise = () => (Math.random() - 0.5) * 3;
+        seedActions.push([
+          (totalDx / numSteps) + noise(),
+          (totalDy / numSteps) + noise()
+        ]);
+      }
+
+      try {
+        const res = await fetch(`${API_URL}/generate/${modelType}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ actions: seedActions })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          // Use the AI-generated path, but steer it towards the target
+          const aiActions = data.generated_actions;
+          const path = buildSteerPath(startX, startY, targetX, targetY, aiActions);
+          return path;
+        }
+      } catch (e) {
+        console.warn('Model fallback to direct path:', e);
+      }
+
+      // Fallback: smooth bezier path
+      return buildBezierPath(startX, startY, targetX, targetY, numSteps);
+    }
+
+    // Build a path that blends AI output with steering towards target
+    function buildSteerPath(startX, startY, targetX, targetY, aiActions) {
+      const path = [];
+      let cx = startX, cy = startY;
+      const steps = aiActions.length;
+
+      for (let i = 0; i < steps; i++) {
+        const progress = (i + 1) / steps;
+        // Where we should be at this progress
+        const idealX = startX + (targetX - startX) * progress;
+        const idealY = startY + (targetY - startY) * progress;
+
+        // Blend: more AI influence early, more steering late
+        const aiWeight = Math.max(0, 1 - progress * 1.5);
+        const steerWeight = 1 - aiWeight;
+
+        const aiDx = aiActions[i][0] * 0.3;
+        const aiDy = aiActions[i][1] * 0.3;
+
+        const steerDx = idealX - cx;
+        const steerDy = idealY - cy;
+
+        const dx = aiDx * aiWeight + steerDx * steerWeight;
+        const dy = aiDy * aiWeight + steerDy * steerWeight;
+
+        cx += dx;
+        cy += dy;
+        path.push({ x: cx, y: cy });
+      }
+
+      // Ensure we end exactly on target
+      path[path.length - 1] = { x: targetX, y: targetY };
+      return path;
+    }
+
+    // Fallback bezier path
+    function buildBezierPath(startX, startY, targetX, targetY, steps) {
+      const path = [];
+      // Random control points for natural curve
+      const cp1x = startX + (targetX - startX) * 0.3 + (Math.random() - 0.5) * 80;
+      const cp1y = startY + (targetY - startY) * 0.3 + (Math.random() - 0.5) * 80;
+      const cp2x = startX + (targetX - startX) * 0.7 + (Math.random() - 0.5) * 60;
+      const cp2y = startY + (targetY - startY) * 0.7 + (Math.random() - 0.5) * 60;
+
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps;
+        const u = 1 - t;
+        const x = u * u * u * startX + 3 * u * u * t * cp1x + 3 * u * t * t * cp2x + t * t * t * targetX;
+        const y = u * u * u * startY + 3 * u * u * t * cp1y + 3 * u * t * t * cp2y + t * t * t * targetY;
+        path.push({ x, y });
+      }
+      return path;
+    }
+
+    // Animate along a path, drawing ghost trail
+    function animatePath(path, stepDelayMs) {
+      stepDelayMs = stepDelayMs || 12;
+      return new Promise(function (resolve) {
+        let idx = 0;
+        function step() {
+          if (!botRunning || idx >= path.length) {
+            resolve();
+            return;
+          }
+          const pt = path[idx];
+          // Draw ghost trail on main canvas
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, 2.5, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(245, 158, 11, 0.6)';
+          ctx.fill();
+          botTrail.push(pt);
+
+          // Record as mouse event
+          record('mousemove', pt.x, pt.y, 'bot');
+          idx++;
+          setTimeout(step, stepDelayMs);
+        }
+        step();
+      });
+    }
+
+    // Bot: click a shape (triangle, revTriangle, square)
+    async function botClickShape() {
+      if (!currentShape || !currentType) return;
+
+      const targetX = currentShape.x;
+      const targetY = currentShape.y;
+
+      // Start from a random edge position
+      const startX = Math.random() * canvas.width;
+      const startY = Math.random() > 0.5 ? 10 : canvas.height - 10;
+
+      botStatus.textContent = '🤖 Moving to ' + currentType + '...';
+      const path = await generateBotPath(startX, startY, targetX, targetY, 48);
+      await animatePath(path, 15);
+
+      if (!botRunning || !running || !currentShape) return;
+
+      // Now perform the correct action
+      const sx = currentShape.x;
+      const sy = currentShape.y;
+
+      if (currentType === 'triangle') {
+        record('mousedown', sx, sy, 'button:0');
+        record('mouseup', sx, sy, 'button:0');
+        record('click', sx, sy, 'bot');
+        if (hitCurrent(sx, sy)) {
+          botStatus.textContent = '✅ Clicked triangle!';
+          botStatus.style.color = 'var(--green)';
+          onSuccess();
+        }
+      } else if (currentType === 'revTriangle') {
+        record('mousedown', sx, sy, 'button:2');
+        record('mouseup', sx, sy, 'button:2');
+        record('contextmenu', sx, sy, 'bot');
+        if (hitCurrent(sx, sy)) {
+          botStatus.textContent = '✅ Right-clicked reversed triangle!';
+          botStatus.style.color = 'var(--green)';
+          onSuccess();
+        }
+      } else if (currentType === 'square') {
+        record('mousedown', sx, sy, 'button:0');
+        record('mouseup', sx, sy, 'button:0');
+        record('click', sx, sy, 'bot');
+        record('dblclick', sx, sy, 'bot');
+        if (hitCurrent(sx, sy)) {
+          botStatus.textContent = '✅ Double-clicked square!';
+          botStatus.style.color = 'var(--green)';
+          onSuccess();
+        }
+      }
+    }
+
+    // Bot: drag circle to goal
+    async function botDragCircle() {
+      if (!currentShape || !goalShape || currentType !== 'circle') return;
+
+      // Step 1: Move to the circle
+      const startX = Math.random() * canvas.width;
+      const startY = Math.random() > 0.5 ? 10 : canvas.height - 10;
+
+      botStatus.textContent = '🤖 Moving to circle...';
+      const pathToCircle = await generateBotPath(startX, startY, currentShape.x, currentShape.y, 32);
+      await animatePath(pathToCircle, 15);
+
+      if (!botRunning || !running || !currentShape || !goalShape) return;
+
+      // Step 2: Drag to goal
+      botStatus.textContent = '🤖 Dragging to goal...';
+      record('mousedown', currentShape.x, currentShape.y, 'button:0');
+      dragging = true;
+      dragOffX = 0;
+      dragOffY = 0;
+
+      const pathToGoal = await generateBotPath(currentShape.x, currentShape.y, goalShape.x, goalShape.y, 48);
+
+      // Animate the drag - actually move the circle
+      for (let i = 0; i < pathToGoal.length; i++) {
+        if (!botRunning || !running) break;
+        const pt = pathToGoal[i];
+        currentShape.x = pt.x;
+        currentShape.y = pt.y;
+        record('mousemove', pt.x, pt.y, 'bot-drag');
+
+        // Draw trail
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 2, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(54, 214, 138, 0.5)';
+        ctx.fill();
+
+        draw();
+        await new Promise(r => setTimeout(r, 15));
+      }
+
+      if (!botRunning || !running || !currentShape) return;
+
+      // Snap to goal
+      currentShape.x = goalShape.x;
+      currentShape.y = goalShape.y;
+      draw();
+
+      record('mouseup', goalShape.x, goalShape.y, 'button:0');
+      dragging = false;
+
+      if (circleOnGoal()) {
+        botStatus.textContent = '✅ Dragged circle to goal!';
+        botStatus.style.color = 'var(--green)';
+        onSuccess();
+      }
+    }
+
+    // ── Init ───────────────────────────────────────────────────────────────────
+    window.addEventListener('resize', resize);
+    resize();
+  </script>
+</body>
+
+</html>
