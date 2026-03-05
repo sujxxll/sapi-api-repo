@@ -23,8 +23,26 @@ cnn_model = tf.keras.models.load_model("fcn_dx_dy_mse_supervised.h5", compile=Fa
 print("✅ Both models loaded!")
 
 
+# The models expect exactly 128 timesteps x 2 features (dx, dy)
+MODEL_TIMESTEPS = 128
+MODEL_FEATURES = 2
+
+
 class MouseInput(BaseModel):
     actions: list[list[float]]
+
+
+def normalize_input(actions: np.ndarray) -> np.ndarray:
+    """Pad or truncate input to exactly MODEL_TIMESTEPS rows."""
+    if len(actions) > MODEL_TIMESTEPS:
+        # Truncate: take the last MODEL_TIMESTEPS entries
+        actions = actions[-MODEL_TIMESTEPS:]
+    elif len(actions) < MODEL_TIMESTEPS:
+        # Pad with zeros at the beginning
+        pad_rows = MODEL_TIMESTEPS - len(actions)
+        padding = np.zeros((pad_rows, MODEL_FEATURES), dtype=np.float32)
+        actions = np.concatenate([padding, actions], axis=0)
+    return actions
 
 
 class ModelInfo(BaseModel):
@@ -72,7 +90,8 @@ def get_models():
 def generate_rnn(data: MouseInput):
     try:
         arr = np.array(data.actions, dtype=np.float32)
-        inp = arr.reshape(1, arr.shape[0], arr.shape[1])
+        arr = normalize_input(arr)
+        inp = arr.reshape(1, MODEL_TIMESTEPS, MODEL_FEATURES)
         output = rnn_model.predict(inp)
         # Compute reconstruction error
         mse = float(np.mean((inp - output) ** 2))
@@ -90,7 +109,8 @@ def generate_rnn(data: MouseInput):
 def generate_cnn(data: MouseInput):
     try:
         arr = np.array(data.actions, dtype=np.float32)
-        inp = arr.reshape(1, arr.shape[0], arr.shape[1])
+        arr = normalize_input(arr)
+        inp = arr.reshape(1, MODEL_TIMESTEPS, MODEL_FEATURES)
         output = cnn_model.predict(inp)
         # Compute reconstruction error
         mse = float(np.mean((inp - output) ** 2))
@@ -109,7 +129,8 @@ def generate_both(data: MouseInput):
     """Run both models and compare results."""
     try:
         arr = np.array(data.actions, dtype=np.float32)
-        inp = arr.reshape(1, arr.shape[0], arr.shape[1])
+        arr = normalize_input(arr)
+        inp = arr.reshape(1, MODEL_TIMESTEPS, MODEL_FEATURES)
 
         rnn_output = rnn_model.predict(inp)
         cnn_output = cnn_model.predict(inp)

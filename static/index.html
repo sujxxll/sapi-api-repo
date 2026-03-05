@@ -276,6 +276,7 @@
         style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:.5rem .7rem;color:var(--text);font-family:var(--mono);font-size:.8rem;margin-bottom:.5rem;outline:none;">
         <option value="rnn">Bidirectional RNN</option>
         <option value="cnn">FCN CNN</option>
+        <option value="both">Both (Compare)</option>
       </select>
       <button class="btn" id="btn-generate" disabled style="background:#7c3aed;color:#fff;">Generate Trajectory</button>
       <div class="status" id="generate-status" style="margin-top:.4rem;color:var(--muted);min-height:1.4em;"></div>
@@ -306,6 +307,31 @@
         </div>
         <canvas id="gen-canvas"
           style="width:100%;height:220px;background:var(--bg);border:1px solid var(--border);border-radius:8px;display:block;"></canvas>
+      </div>
+    </div>
+
+    <!-- Both models comparison panel -->
+    <div id="both-panel" style="display:none; grid-column:1/-1;">
+      <div class="panel" style="margin-top:0;">
+        <h2>Model Comparison</h2>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+          <div>
+            <div style="display:flex;gap:.6rem;align-items:center;margin-bottom:.5rem;">
+              <span style="font-family:var(--mono);font-size:.75rem;color:#5b6cff;font-weight:700;">▶ RNN</span>
+              <span id="rnn-mse-label" style="font-family:var(--mono);font-size:.7rem;color:var(--muted);"></span>
+            </div>
+            <canvas id="rnn-canvas"
+              style="width:100%;height:200px;background:var(--bg);border:1px solid var(--border);border-radius:8px;display:block;"></canvas>
+          </div>
+          <div>
+            <div style="display:flex;gap:.6rem;align-items:center;margin-bottom:.5rem;">
+              <span style="font-family:var(--mono);font-size:.75rem;color:#ff5f7e;font-weight:700;">▶ CNN</span>
+              <span id="cnn-mse-label" style="font-family:var(--mono);font-size:.7rem;color:var(--muted);"></span>
+            </div>
+            <canvas id="cnn-canvas"
+              style="width:100%;height:200px;background:var(--bg);border:1px solid var(--border);border-radius:8px;display:block;"></canvas>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -492,10 +518,24 @@
       }, 280);
     }
 
-    // ── Event recording ────────────────────────────────────────────────────────
-    function record(type, x, y, extra) {
-      extra = extra || '';
-      events.push({ time: Date.now(), type: type, x: x.toFixed(1), y: y.toFixed(1), extra: extra });
+    // ── Event recording (matching session_2020_05_14_1min.csv format) ──────────
+    // Format: client timestamp, button, state, x, y
+    // - client timestamp: ms since measurement start
+    // - button: NoButton | Left | Right
+    // - state: Move | Pressed | Released | Drag
+    // - x,y: integer pixel coordinates
+    let measurementStartTime = 0;
+    let isDragging = false; // track if left button is held down
+
+    function record(button, state, x, y) {
+      const ts = Date.now() - measurementStartTime;
+      events.push({
+        timestamp: ts,
+        button: button,
+        state: state,
+        x: Math.round(x),
+        y: Math.round(y)
+      });
     }
 
     var lastMoveTime = 0;
@@ -506,19 +546,27 @@
       if (now - lastMoveTime < 16) return;
       lastMoveTime = now;
       var p = getPos(e);
-      record('mousemove', p.x, p.y);
 
       if (dragging && currentType === 'circle') {
         currentShape.x = p.x - dragOffX;
         currentShape.y = p.y - dragOffY;
+        // While dragging, record as Left + Drag
+        record('Left', 'Drag', p.x, p.y);
         draw();
+      } else if (isDragging) {
+        // Button down but not circle-drag
+        record('Left', 'Drag', p.x, p.y);
+      } else {
+        record('NoButton', 'Move', p.x, p.y);
       }
     });
 
     canvas.addEventListener('mousedown', function (e) {
       if (!running) return;
       var p = getPos(e);
-      record('mousedown', p.x, p.y, 'button:' + e.button);
+      var btn = e.button === 2 ? 'Right' : 'Left';
+      record(btn, 'Pressed', p.x, p.y);
+      if (btn === 'Left') isDragging = true;
       if (currentType === 'circle' && hitCurrent(p.x, p.y)) {
         dragging = true;
         dragOffX = p.x - currentShape.x;
@@ -529,7 +577,9 @@
     canvas.addEventListener('mouseup', function (e) {
       if (!running) return;
       var p = getPos(e);
-      record('mouseup', p.x, p.y, 'button:' + e.button);
+      var btn = e.button === 2 ? 'Right' : 'Left';
+      record(btn, 'Released', p.x, p.y);
+      if (btn === 'Left') isDragging = false;
       if (dragging) {
         dragging = false;
         if (circleOnGoal()) {
@@ -543,7 +593,7 @@
     canvas.addEventListener('click', function (e) {
       if (!running || currentType !== 'triangle') return;
       var p = getPos(e);
-      record('click', p.x, p.y);
+      // click is already recorded as Pressed + Released
       if (hitCurrent(p.x, p.y)) onSuccess();
     });
 
@@ -551,14 +601,14 @@
       e.preventDefault();
       if (!running || currentType !== 'revTriangle') return;
       var p = getPos(e);
-      record('contextmenu', p.x, p.y);
+      // contextmenu is already recorded as Right Pressed + Released
       if (hitCurrent(p.x, p.y)) onSuccess();
     });
 
     canvas.addEventListener('dblclick', function (e) {
       if (!running || currentType !== 'square') return;
       var p = getPos(e);
-      record('dblclick', p.x, p.y);
+      // dblclick events are already recorded as pairs of Left Pressed + Released
       if (hitCurrent(p.x, p.y)) onSuccess();
     });
 
@@ -593,6 +643,8 @@
       }
       errorEl.textContent = '';
       events = [];
+      measurementStartTime = Date.now();
+      isDragging = false;
       running = true;
       secondsLeft = val * 60;
       lastUsedType = null;
@@ -610,6 +662,7 @@
       clearInterval(timerInterval);
       events = [];
       dragging = false;
+      isDragging = false;
       currentType = null;
       lastUsedType = null;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -624,15 +677,15 @@
 
     btnDl.addEventListener('click', function () {
       if (!events.length) return;
-      var header = 'time,type,x,y,extra\n';
+      var header = 'client timestamp,button,state,x,y\n';
       var rows = events.map(function (e) {
-        return e.time + ',' + e.type + ',' + e.x + ',' + e.y + ',' + e.extra;
+        return e.timestamp + ',' + e.button + ',' + e.state + ',' + e.x + ',' + e.y;
       }).join('\n');
       var blob = new Blob([header + rows], { type: 'text/csv' });
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;
-      a.download = 'mouse_dynamics_' + Date.now() + '.csv';
+      a.download = 'session_' + new Date().toISOString().slice(0, 10).replace(/-/g, '_') + '_' + (parseInt(durationInput.value) || 1) + 'min.csv';
       a.click();
       URL.revokeObjectURL(url);
     });
@@ -663,8 +716,8 @@
       btnGenerate.disabled = true;
 
       try {
-        // Convert recorded events to [x, y, dx, dy] format expected by the model
-        const moveEvents = events.filter(e => e.type === 'mousemove');
+        // Convert recorded events to [dx, dy] format expected by the model
+        const moveEvents = events.filter(e => e.state === 'Move' || e.state === 'Drag');
         if (moveEvents.length < 2) {
           generateStatus.textContent = '❌ Not enough mouse movement data';
           generateStatus.style.color = 'var(--accent2)';
@@ -675,12 +728,13 @@
         // Build dx, dy pairs (what the model was trained on: _dx_dy_)
         const actions = [];
         for (let i = 1; i < moveEvents.length; i++) {
-          const dx = parseFloat(moveEvents[i].x) - parseFloat(moveEvents[i - 1].x);
-          const dy = parseFloat(moveEvents[i].y) - parseFloat(moveEvents[i - 1].y);
+          const dx = moveEvents[i].x - moveEvents[i - 1].x;
+          const dy = moveEvents[i].y - moveEvents[i - 1].y;
           actions.push([dx, dy]);
         }
 
-        const res = await fetch(`${API_URL}/generate/${modelType}`, {
+        const endpoint = modelType === 'both' ? 'both' : modelType;
+        const res = await fetch(`${API_URL}/generate/${endpoint}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ actions: actions })
@@ -695,8 +749,13 @@
         generateStatus.textContent = '✅ Generated!';
         generateStatus.style.color = 'var(--green)';
 
-        // Display result
-        displayGeneratedTrajectory(data.generated_actions, data.model);
+        if (modelType === 'both') {
+          // Show comparison view
+          displayBothTrajectories(data);
+        } else {
+          // Show single model view
+          displayGeneratedTrajectory(data.generated_actions, data.model);
+        }
 
       } catch (err) {
         generateStatus.textContent = '❌ ' + err.message;
@@ -709,23 +768,51 @@
 
     function displayGeneratedTrajectory(actions, modelName) {
       generatedPanel.style.display = 'block';
+      document.getElementById('both-panel').style.display = 'none';
       genModelLabel.textContent = '▶ ' + (modelName || modelSelect.value).toUpperCase();
       genPointsLabel.textContent = actions.length + ' points';
 
-      // Size canvas
-      const w = genCanvas.parentElement.offsetWidth - 32;
-      genCanvas.width = w;
-      genCanvas.height = 220;
+      drawTrajectoryOnCanvas(genCanvas, actions, 220);
+    }
 
-      const gctx = genCanvas.getContext('2d');
-      gctx.clearRect(0, 0, genCanvas.width, genCanvas.height);
+    function displayBothTrajectories(data) {
+      generatedPanel.style.display = 'none';
+      const bothPanel = document.getElementById('both-panel');
+      bothPanel.style.display = 'block';
+
+      // MSE labels
+      document.getElementById('rnn-mse-label').textContent =
+        'MSE: ' + data.rnn.reconstruction_error.toFixed(4);
+      document.getElementById('cnn-mse-label').textContent =
+        'MSE: ' + data.cnn.reconstruction_error.toFixed(4);
+
+      // Draw RNN trajectory (blue hue)
+      const rnnCanvas = document.getElementById('rnn-canvas');
+      drawTrajectoryOnCanvas(rnnCanvas, data.rnn.generated_actions, 200, 220, 80);
+
+      // Draw CNN trajectory (pink hue)
+      const cnnCanvas = document.getElementById('cnn-canvas');
+      drawTrajectoryOnCanvas(cnnCanvas, data.cnn.generated_actions, 200, 340, 60);
+    }
+
+    function drawTrajectoryOnCanvas(canvasEl, actions, height, hueStart, hueRange) {
+      hueStart = hueStart || 220;
+      hueRange = hueRange || 80;
+      height = height || 220;
+
+      const w = canvasEl.parentElement.offsetWidth - 32;
+      canvasEl.width = w;
+      canvasEl.height = height;
+
+      const gctx = canvasEl.getContext('2d');
+      gctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
 
       // Reconstruct absolute path from dx/dy
-      let px = genCanvas.width / 2;
-      let py = genCanvas.height / 2;
+      let px = canvasEl.width / 2;
+      let py = canvasEl.height / 2;
       const points = [[px, py]];
       for (const [dx, dy] of actions) {
-        px += dx * 0.3; // scale down to fit canvas
+        px += dx * 0.3;
         py += dy * 0.3;
         points.push([px, py]);
       }
@@ -736,7 +823,7 @@
       gctx.lineCap = 'round';
       for (let i = 1; i < points.length; i++) {
         const t = i / points.length;
-        gctx.strokeStyle = `hsl(${220 + t * 80}, 80%, ${50 + t * 20}%)`;
+        gctx.strokeStyle = `hsl(${hueStart + t * hueRange}, 80%, ${50 + t * 20}%)`;
         gctx.beginPath();
         gctx.moveTo(points[i - 1][0], points[i - 1][1]);
         gctx.lineTo(points[i][0], points[i][1]);
@@ -769,6 +856,8 @@
     let botRunning = false;
     let botAnimId = null;
     let botTrail = []; // ghost trail for visual feedback
+    let humanDxDy = []; // user's recorded movement deltas
+    let aiGeneratedDxDy = null; // model's output based on user's movements
 
     btnBot.addEventListener('click', function () {
       if (botRunning) return;
@@ -810,20 +899,66 @@
     }
 
     async function startBot() {
+      // Check if user has recorded movement data first
+      const moveEvents = events.filter(e => e.state === 'Move' || e.state === 'Drag');
+      if (moveEvents.length < 3) {
+        botStatus.textContent = '⚠️ Play the puzzle first to record your movements!';
+        botStatus.style.color = 'var(--accent2)';
+        return;
+      }
+
       botRunning = true;
       btnBot.disabled = true;
       btnBotStop.disabled = false;
-      botStatus.textContent = '🤖 Bot starting...';
+      botStatus.textContent = '🤖 Extracting your movement style...';
       botStatus.style.color = '#f59e0b';
       botTrail = [];
 
-      // If not running, start measurement automatically
+      // Step 1: Extract dx/dy from user's recorded movements
+      humanDxDy = [];
+      for (let i = 1; i < moveEvents.length; i++) {
+        humanDxDy.push([
+          moveEvents[i].x - moveEvents[i - 1].x,
+          moveEvents[i].y - moveEvents[i - 1].y
+        ]);
+      }
+
+      // Step 2: Send user's dx/dy to the selected AI model
+      const modelType = modelSelect.value === 'both' ? 'rnn' : modelSelect.value;
+      botStatus.textContent = '🤖 Sending your movements to ' + modelType.toUpperCase() + ' model...';
+
+      try {
+        const res = await fetch(`${API_URL}/generate/${modelType}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ actions: humanDxDy })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          aiGeneratedDxDy = data.generated_actions;
+          botStatus.textContent = '🤖 Model learned your style! (MSE: ' + data.reconstruction_error.toFixed(4) + ') Starting...';
+        } else {
+          botStatus.textContent = '⚠️ Model error, using your raw movements...';
+          aiGeneratedDxDy = humanDxDy;
+        }
+      } catch (e) {
+        console.warn('Model call failed, using raw movements:', e);
+        botStatus.textContent = '⚠️ Model unreachable, using your raw movements...';
+        aiGeneratedDxDy = humanDxDy;
+      }
+
+      // Step 3: Save human events, then start a fresh measurement for bot
+      const savedHumanEvents = [...events];
+
       if (!running) {
         var val = parseInt(durationInput.value);
         if (!val || val < 1 || val > 60) val = 1;
         durationInput.value = val;
         errorEl.textContent = '';
         events = [];
+        measurementStartTime = Date.now();
+        isDragging = false;
         running = true;
         secondsLeft = val * 60;
         lastUsedType = null;
@@ -875,45 +1010,55 @@
       }
     }
 
-    // Generate a smooth AI-driven path from start to target
+    // Generate a path from start to target using user's AI-generated movement style
     async function generateBotPath(startX, startY, targetX, targetY, numSteps) {
       numSteps = numSteps || 64;
-      const modelType = modelSelect.value;
 
-      // Build a seed trajectory as dx/dy deltas pointing towards target
+      if (!aiGeneratedDxDy || aiGeneratedDxDy.length === 0) {
+        // No AI data available, fallback to bezier
+        return buildBezierPath(startX, startY, targetX, targetY, numSteps);
+      }
+
+      // Pick a random segment from the AI-generated dx/dy (user's style)
+      // and scale it to point from start to target
       const totalDx = targetX - startX;
       const totalDy = targetY - startY;
-      const seedActions = [];
+      const distance = Math.hypot(totalDx, totalDy);
+      const angle = Math.atan2(totalDy, totalDx);
+
+      // Sample numSteps points from the AI-generated data
+      const aiLen = aiGeneratedDxDy.length;
+      const startIdx = Math.floor(Math.random() * Math.max(1, aiLen - numSteps));
+      const segment = [];
       for (let i = 0; i < numSteps; i++) {
-        // Base direction with some noise
-        const progress = (i + 1) / numSteps;
-        const noise = () => (Math.random() - 0.5) * 3;
-        seedActions.push([
-          (totalDx / numSteps) + noise(),
-          (totalDy / numSteps) + noise()
-        ]);
+        const idx = (startIdx + i) % aiLen;
+        segment.push(aiGeneratedDxDy[idx]);
       }
 
-      try {
-        const res = await fetch(`${API_URL}/generate/${modelType}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ actions: seedActions })
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          // Use the AI-generated path, but steer it towards the target
-          const aiActions = data.generated_actions;
-          const path = buildSteerPath(startX, startY, targetX, targetY, aiActions);
-          return path;
-        }
-      } catch (e) {
-        console.warn('Model fallback to direct path:', e);
+      // Calculate the original movement magnitude of this segment
+      let segDx = 0, segDy = 0;
+      for (const [dx, dy] of segment) {
+        segDx += dx;
+        segDy += dy;
       }
+      const segDistance = Math.hypot(segDx, segDy) || 1;
+      const segAngle = Math.atan2(segDy, segDx);
 
-      // Fallback: smooth bezier path
-      return buildBezierPath(startX, startY, targetX, targetY, numSteps);
+      // Scale and rotate segment to match start→target direction
+      const scale = distance / segDistance;
+      const rotAngle = angle - segAngle;
+      const cosR = Math.cos(rotAngle);
+      const sinR = Math.sin(rotAngle);
+
+      const scaledActions = segment.map(([dx, dy]) => {
+        const rx = (dx * cosR - dy * sinR) * scale;
+        const ry = (dx * sinR + dy * cosR) * scale;
+        return [rx, ry];
+      });
+
+      // Build the path using the styled deltas with steering
+      const path = buildSteerPath(startX, startY, targetX, targetY, scaledActions);
+      return path;
     }
 
     // Build a path that blends AI output with steering towards target
@@ -988,8 +1133,8 @@
           ctx.fill();
           botTrail.push(pt);
 
-          // Record as mouse event
-          record('mousemove', pt.x, pt.y, 'bot');
+          // Record as mouse event (NoButton + Move for bot path)
+          record('NoButton', 'Move', pt.x, pt.y);
           idx++;
           setTimeout(step, stepDelayMs);
         }
@@ -1019,28 +1164,26 @@
       const sy = currentShape.y;
 
       if (currentType === 'triangle') {
-        record('mousedown', sx, sy, 'button:0');
-        record('mouseup', sx, sy, 'button:0');
-        record('click', sx, sy, 'bot');
+        record('Left', 'Pressed', sx, sy);
+        record('Left', 'Released', sx, sy);
         if (hitCurrent(sx, sy)) {
           botStatus.textContent = '✅ Clicked triangle!';
           botStatus.style.color = 'var(--green)';
           onSuccess();
         }
       } else if (currentType === 'revTriangle') {
-        record('mousedown', sx, sy, 'button:2');
-        record('mouseup', sx, sy, 'button:2');
-        record('contextmenu', sx, sy, 'bot');
+        record('Right', 'Pressed', sx, sy);
+        record('Right', 'Released', sx, sy);
         if (hitCurrent(sx, sy)) {
           botStatus.textContent = '✅ Right-clicked reversed triangle!';
           botStatus.style.color = 'var(--green)';
           onSuccess();
         }
       } else if (currentType === 'square') {
-        record('mousedown', sx, sy, 'button:0');
-        record('mouseup', sx, sy, 'button:0');
-        record('click', sx, sy, 'bot');
-        record('dblclick', sx, sy, 'bot');
+        record('Left', 'Pressed', sx, sy);
+        record('Left', 'Released', sx, sy);
+        record('Left', 'Pressed', sx, sy);
+        record('Left', 'Released', sx, sy);
         if (hitCurrent(sx, sy)) {
           botStatus.textContent = '✅ Double-clicked square!';
           botStatus.style.color = 'var(--green)';
@@ -1065,7 +1208,8 @@
 
       // Step 2: Drag to goal
       botStatus.textContent = '🤖 Dragging to goal...';
-      record('mousedown', currentShape.x, currentShape.y, 'button:0');
+      record('Left', 'Pressed', currentShape.x, currentShape.y);
+      isDragging = true;
       dragging = true;
       dragOffX = 0;
       dragOffY = 0;
@@ -1078,7 +1222,7 @@
         const pt = pathToGoal[i];
         currentShape.x = pt.x;
         currentShape.y = pt.y;
-        record('mousemove', pt.x, pt.y, 'bot-drag');
+        record('Left', 'Drag', pt.x, pt.y);
 
         // Draw trail
         ctx.beginPath();
@@ -1097,7 +1241,8 @@
       currentShape.y = goalShape.y;
       draw();
 
-      record('mouseup', goalShape.x, goalShape.y, 'button:0');
+      record('Left', 'Released', goalShape.x, goalShape.y);
+      isDragging = false;
       dragging = false;
 
       if (circleOnGoal()) {
